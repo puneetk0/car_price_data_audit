@@ -1,0 +1,1442 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8"/>
+<meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+<title>AUTO MARKET INTELLIGENCE — RACE TELEMETRY</title>
+<link href="https://fonts.googleapis.com/css2?family=Outfit:wght@400;600;700;900&family=JetBrains+Mono:wght@400;700&family=Inter:wght@300;400;500;600&display=swap" rel="stylesheet"/>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/4.4.1/chart.umd.min.js"></script>
+<style>
+  :root {
+    --bg: #080810;
+    --surface: #0e0e1a;
+    --surface2: #13131f;
+    --border: rgba(255,255,255,0.06);
+    --border-hot: rgba(255,60,0,0.4);
+    --red: #ff3c00;
+    --red-dim: rgba(255,60,0,0.15);
+    --blue: #00d4ff;
+    --blue-dim: rgba(0,212,255,0.12);
+    --gold: #ffd200;
+    --gold-dim: rgba(255,210,0,0.12);
+    --green: #00ff88;
+    --green-dim: rgba(0,255,136,0.1);
+    --purple: #b060ff;
+    --text: #e8e8f0;
+    --text-dim: #5a5a7a;
+    --text-mid: #9090b0;
+    --mono: 'JetBrains Mono', monospace;
+    --display: 'Outfit', sans-serif;
+    --body: 'Inter', sans-serif;
+  }
+
+  * { margin:0; padding:0; box-sizing:border-box; }
+
+  body {
+    background: var(--bg);
+    color: var(--text);
+    font-family: var(--body);
+    overflow-x: hidden;
+    min-height: 100vh;
+  }
+
+  /* Scanline overlay */
+  body::before {
+    content:'';
+    position:fixed;
+    inset:0;
+    background: repeating-linear-gradient(
+      0deg,
+      transparent,
+      transparent 2px,
+      rgba(0,0,0,0.08) 2px,
+      rgba(0,0,0,0.08) 4px
+    );
+    pointer-events:none;
+    z-index:9999;
+  }
+
+  /* Racing stripe left edge */
+  body::after {
+    content:'';
+    position:fixed;
+    left:0; top:0; bottom:0;
+    width:3px;
+    background: linear-gradient(180deg, var(--red), var(--gold), var(--blue), var(--red));
+    z-index:100;
+  }
+
+  /* ─── HEADER ─── */
+  .header {
+    padding: 32px 40px 0 52px;
+    position: relative;
+    overflow: hidden;
+  }
+
+  .header-bg {
+    position:absolute;
+    inset:0;
+    background: radial-gradient(ellipse 80% 200% at 70% 50%, rgba(255,60,0,0.06) 0%, transparent 70%);
+    pointer-events:none;
+  }
+
+  .header-top {
+    display: flex;
+    align-items: flex-start;
+    justify-content: space-between;
+  }
+
+  .header-label {
+    font-family: var(--mono);
+    font-size: 10px;
+    color: var(--red);
+    letter-spacing: 4px;
+    text-transform: uppercase;
+    margin-bottom: 8px;
+    display: flex;
+    align-items: center;
+    gap: 8px;
+  }
+  .header-label::before {
+    content:'';
+    width:20px; height:1px;
+    background: var(--red);
+  }
+
+  .header-title {
+    font-family: var(--display);
+    font-size: clamp(28px, 4vw, 52px);
+    font-weight: 900;
+    line-height: 0.95;
+    letter-spacing: -1px;
+    color: var(--text);
+  }
+
+  .header-title span {
+    color: var(--red);
+    display: block;
+  }
+
+  .header-sub {
+    font-family: var(--mono);
+    font-size: 11px;
+    color: var(--text-dim);
+    letter-spacing: 2px;
+    margin-top: 12px;
+  }
+
+  .header-right {
+    text-align: right;
+  }
+
+  .live-indicator {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    font-family: var(--mono);
+    font-size: 10px;
+    color: var(--green);
+    letter-spacing: 2px;
+    background: var(--green-dim);
+    border: 1px solid rgba(0,255,136,0.3);
+    padding: 6px 12px;
+    border-radius: 2px;
+  }
+
+  .live-dot {
+    width:6px; height:6px;
+    border-radius: 50%;
+    background: var(--green);
+    animation: pulse 1.4s ease-in-out infinite;
+  }
+
+  @keyframes pulse {
+    0%, 100% { opacity:1; transform:scale(1); }
+    50% { opacity:0.4; transform:scale(0.7); }
+  }
+
+  .header-stats {
+    margin-top:10px;
+    font-family: var(--mono);
+    font-size:10px;
+    color: var(--text-dim);
+    letter-spacing:1px;
+  }
+
+  /* Horizontal rule with racing ticks */
+  .divider {
+    margin: 24px 40px 0 52px;
+    position:relative;
+    height:1px;
+    background: var(--border);
+  }
+  .divider::after {
+    content:'';
+    position:absolute;
+    left:0; top:0;
+    width:120px; height:1px;
+    background: linear-gradient(90deg, var(--red), transparent);
+  }
+
+  /* ─── BRAND FILTER ─── */
+  .filter-bar {
+    padding: 20px 40px 0 52px;
+    display:flex;
+    align-items:center;
+    gap: 12px;
+    flex-wrap:wrap;
+  }
+
+  .filter-label {
+    font-family: var(--mono);
+    font-size: 9px;
+    color: var(--text-dim);
+    letter-spacing: 3px;
+    text-transform: uppercase;
+    margin-right: 4px;
+  }
+
+  .brand-pill {
+    font-family: var(--mono);
+    font-size: 10px;
+    letter-spacing: 2px;
+    padding: 6px 14px;
+    border: 1px solid var(--border);
+    background: transparent;
+    color: var(--text-dim);
+    cursor: pointer;
+    border-radius: 1px;
+    transition: all 0.15s;
+    text-transform: uppercase;
+  }
+
+  .brand-pill.active {
+    border-color: var(--red);
+    color: var(--red);
+    background: var(--red-dim);
+    box-shadow: 0 0 12px rgba(255,60,0,0.2);
+  }
+
+  .brand-pill:hover:not(.active) {
+    border-color: var(--text-mid);
+    color: var(--text-mid);
+  }
+
+  /* ─── GRID ─── */
+  .dashboard {
+    padding: 24px 40px 40px 52px;
+    display: grid;
+    gap: 16px;
+  }
+
+  .row-kpi { display:grid; grid-template-columns:repeat(6,1fr); gap:12px; }
+  .row-main { display:grid; grid-template-columns:1fr 1fr; gap:16px; }
+  .row-wide { display:grid; grid-template-columns:1fr; gap:16px; }
+  .row-split { display:grid; grid-template-columns:5fr 4fr; gap:16px; }
+
+  /* ─── KPI CARDS ─── */
+  .kpi-card {
+    background: var(--surface);
+    border: 1px solid var(--border);
+    padding: 16px;
+    position:relative;
+    overflow:hidden;
+    animation: fadeUp 0.6s ease both;
+  }
+
+  .kpi-card::before {
+    content:'';
+    position:absolute;
+    top:0; left:0; right:0;
+    height:2px;
+    background: var(--accent, var(--red));
+  }
+
+  .kpi-card.accent-blue { --accent: var(--blue); }
+  .kpi-card.accent-gold { --accent: var(--gold); }
+  .kpi-card.accent-green { --accent: var(--green); }
+  .kpi-card.accent-purple { --accent: var(--purple); }
+
+  .kpi-label {
+    font-family: var(--mono);
+    font-size: 9px;
+    color: var(--text-dim);
+    letter-spacing: 2px;
+    text-transform: uppercase;
+    margin-bottom: 10px;
+  }
+
+  .kpi-value {
+    font-family: var(--display);
+    font-size: clamp(18px, 2vw, 26px);
+    font-weight: 700;
+    color: var(--text);
+    line-height:1;
+  }
+
+  .kpi-value .unit {
+    font-size: 0.55em;
+    color: var(--text-dim);
+    font-weight:400;
+    margin-left:2px;
+  }
+
+  .kpi-sub {
+    font-family: var(--mono);
+    font-size: 9px;
+    color: var(--text-dim);
+    margin-top: 6px;
+    letter-spacing:1px;
+  }
+
+  /* ─── CHART PANELS ─── */
+  .panel {
+    background: var(--surface);
+    border: 1px solid var(--border);
+    padding: 24px;
+    position:relative;
+    overflow:hidden;
+    animation: fadeUp 0.6s ease both;
+    display: flex;
+    flex-direction: column;
+  }
+
+  .panel::before {
+    content:'';
+    position:absolute;
+    top:0; left:0;
+    width:40px; height:2px;
+    background: var(--panel-accent, var(--red));
+  }
+
+  .panel.blue { --panel-accent: var(--blue); }
+  .panel.gold { --panel-accent: var(--gold); }
+  .panel.green { --panel-accent: var(--green); }
+  .panel.purple { --panel-accent: var(--purple); }
+
+  /* Corner bracket decoration */
+  .panel::after {
+    content:'';
+    position:absolute;
+    bottom: 12px; right:12px;
+    width:20px; height:20px;
+    border-right: 1px solid var(--border);
+    border-bottom: 1px solid var(--border);
+    pointer-events:none;
+  }
+
+  .panel-header {
+    margin-bottom: 6px;
+  }
+
+  .panel-tag {
+    font-family: var(--mono);
+    font-size: 9px;
+    color: var(--panel-accent, var(--red));
+    letter-spacing: 3px;
+    text-transform: uppercase;
+    margin-bottom: 6px;
+  }
+
+  .panel-title {
+    font-family: var(--display);
+    font-size: clamp(13px,1.5vw,17px);
+    font-weight: 700;
+    letter-spacing: 0.5px;
+    color: var(--text);
+    line-height:1.2;
+  }
+
+  .panel-insight {
+    font-family: var(--mono);
+    font-size: 10px;
+    color: var(--text-dim);
+    margin-top: 6px;
+    letter-spacing: 0.5px;
+    line-height:1.5;
+    border-left: 2px solid var(--panel-accent, var(--red));
+    padding-left: 10px;
+  }
+
+  .panel-insight strong {
+    color: var(--panel-accent, var(--red));
+    font-weight: normal;
+  }
+
+  .chart-wrap {
+    margin-top: 20px;
+    position:relative;
+  }
+
+  /* ─── HEATMAP ─── */
+  .heatmap {
+    margin-top: 20px;
+    width:100%;
+    flex: 1;
+    display: flex;
+    flex-direction: column;
+    justify-content: center;
+  }
+
+  .heatmap table {
+    width:100%;
+    height: 100%;
+    border-collapse: collapse;
+  }
+
+  .heatmap th {
+    font-family: var(--mono);
+    font-size: 9px;
+    letter-spacing:2px;
+    color: var(--text-dim);
+    padding: 6px 8px;
+    text-align:center;
+    text-transform: uppercase;
+  }
+
+  .heatmap th.row-head {
+    text-align:left;
+    width:90px;
+    color: var(--text-mid);
+  }
+
+  .heatmap td {
+    padding: 10px 8px;
+    text-align:center;
+    font-family: var(--mono);
+    font-size: 12px;
+    font-weight:400;
+    border: 1px solid rgba(255,255,255,0.03);
+    position:relative;
+    transition: all 0.2s;
+    cursor: default;
+  }
+
+  .heatmap td:hover {
+    border-color: rgba(255,255,255,0.2);
+    z-index:2;
+  }
+
+  .heatmap td.row-label {
+    font-size: 10px;
+    letter-spacing:1.5px;
+    color: var(--text-mid);
+    text-align:left;
+    padding-left:0;
+    background:transparent !important;
+    border:none;
+  }
+
+  .heatmap .champion {
+    border: 1px solid var(--gold) !important;
+    box-shadow: 0 0 12px rgba(255,210,0,0.25), inset 0 0 8px rgba(255,210,0,0.05);
+  }
+
+  .heatmap .champion::after {
+    content: '★';
+    position:absolute;
+    top:2px; right:4px;
+    font-size:7px;
+    color:var(--gold);
+  }
+
+  /* ─── ERA HEATMAP ─── */
+  .era-grid {
+    margin-top:20px;
+    display:grid;
+    gap:3px;
+  }
+
+  .era-row {
+    display:grid;
+    grid-template-columns: 90px repeat(5, 1fr);
+    gap:3px;
+    align-items:center;
+  }
+
+  .era-brand-label {
+    font-family: var(--mono);
+    font-size:10px;
+    letter-spacing:2px;
+    color: var(--text-mid);
+    text-transform: uppercase;
+  }
+
+  .era-cell {
+    height: 36px;
+    display:flex;
+    align-items:center;
+    justify-content:center;
+    font-family: var(--mono);
+    font-size: 11px;
+    position:relative;
+    border: 1px solid transparent;
+    transition: all 0.15s;
+    cursor:default;
+  }
+
+  .era-cell:hover {
+    border-color: rgba(255,255,255,0.3);
+    z-index:2;
+  }
+
+  .era-header-row {
+    display:grid;
+    grid-template-columns: 90px repeat(5,1fr);
+    gap:3px;
+    margin-bottom:4px;
+  }
+
+  .era-header-cell {
+    font-family: var(--mono);
+    font-size: 8px;
+    letter-spacing:2px;
+    color: var(--text-dim);
+    text-align:center;
+    text-transform:uppercase;
+    padding: 4px 0;
+  }
+
+  /* ─── SCATTER ANNOTATION ─── */
+  .correlation-badge {
+    position:absolute;
+    top:8px; right:8px;
+    background: var(--surface2);
+    border: 1px solid var(--border-hot);
+    padding: 8px 12px;
+    font-family: var(--mono);
+    font-size:10px;
+    color: var(--red);
+    letter-spacing:1px;
+    z-index:10;
+  }
+
+  /* ─── ANIMATIONS ─── */
+  @keyframes fadeUp {
+    from { opacity:0; transform:translateY(16px); }
+    to   { opacity:1; transform:translateY(0); }
+  }
+
+  @keyframes kpiFlip {
+    from { opacity: 0; transform: translateY(6px); }
+    to   { opacity: 1; transform: translateY(0);   }
+  }
+
+  .flip {
+    animation: kpiFlip 0.4s ease both !important;
+  }
+  
+  .row-new { display:grid; grid-template-columns:1fr 1fr; gap:16px; margin-top:16px; }
+
+
+  .kpi-card:nth-child(1) { animation-delay:0.05s; }
+  .kpi-card:nth-child(2) { animation-delay:0.10s; }
+  .kpi-card:nth-child(3) { animation-delay:0.15s; }
+  .kpi-card:nth-child(4) { animation-delay:0.20s; }
+  .kpi-card:nth-child(5) { animation-delay:0.25s; }
+  .kpi-card:nth-child(6) { animation-delay:0.30s; }
+
+  /* speed lines bg for panels */
+  .speed-bg {
+    position:absolute;
+    inset:0;
+    background: repeating-linear-gradient(
+      -75deg,
+      transparent,
+      transparent 40px,
+      rgba(255,255,255,0.008) 40px,
+      rgba(255,255,255,0.008) 41px
+    );
+    pointer-events:none;
+  }
+
+  /* ─── TOOLTIP ─── */
+  .custom-tooltip {
+    position:fixed;
+    background: var(--surface2);
+    border: 1px solid var(--border);
+    padding: 10px 14px;
+    font-family: var(--mono);
+    font-size:11px;
+    pointer-events:none;
+    z-index:1000;
+    display:none;
+    line-height:1.6;
+    box-shadow: 0 8px 24px rgba(0,0,0,0.6);
+  }
+
+  /* footer */
+  .footer {
+    padding: 0 40px 32px 52px;
+    display:flex;
+    justify-content:space-between;
+    align-items:center;
+  }
+
+  .footer-text {
+    font-family: var(--mono);
+    font-size:9px;
+    color: var(--text-dim);
+    letter-spacing:2px;
+  }
+
+  .sector-bar {
+    display:flex;
+    gap:2px;
+  }
+
+  .sector {
+    width:40px; height:3px;
+    border-radius:1px;
+  }
+
+  @media (max-width: 1100px) {
+    .row-kpi { grid-template-columns:repeat(3,1fr); }
+    .row-main, .row-split, .row-new { grid-template-columns:1fr; }
+  }
+</style>
+</head>
+<body>
+
+<!-- HEADER -->
+<div class="header">
+  <div class="header-bg"></div>
+  <div class="header-top">
+    <div>
+      <div class="header-label">AUTO MARKET INTELLIGENCE SYSTEM</div>
+      <div class="header-title">
+        RACE TO<br>
+        <span>VALUE</span>
+      </div>
+      <div class="header-sub">GLOBAL CAR MARKET ANALYTICS · 2250 UNITS · 2000–2023</div>
+    </div>
+    <div class="header-right">
+      <div class="live-indicator">
+        <div class="live-dot"></div>
+        TELEMETRY ACTIVE
+      </div>
+      <div class="header-stats" style="margin-top:10px;">
+        7 BRANDS &nbsp;·&nbsp; 28 MODELS &nbsp;·&nbsp; 4 FUEL TYPES<br>
+        24 MODEL YEARS &nbsp;·&nbsp; $5K–$100K RANGE
+      </div>
+    </div>
+  </div>
+</div>
+
+<div class="divider"></div>
+
+<!-- BRAND FILTER -->
+<div class="filter-bar">
+  <span class="filter-label">FILTER :</span>
+  <button class="brand-pill active" data-brand="ALL">ALL</button>
+  <button class="brand-pill" data-brand="BMW">BMW</button>
+  <button class="brand-pill" data-brand="Mercedes">MERCEDES</button>
+  <button class="brand-pill" data-brand="Tesla">TESLA</button>
+  <button class="brand-pill" data-brand="Audi">AUDI</button>
+  <button class="brand-pill" data-brand="Toyota">TOYOTA</button>
+  <button class="brand-pill" data-brand="Ford">FORD</button>
+  <button class="brand-pill" data-brand="Honda">HONDA</button>
+</div>
+
+<!-- DASHBOARD -->
+<div class="dashboard">
+
+  <!-- KPI ROW -->
+  <div class="row-kpi" id="kpi-row">
+    <div class="kpi-card" id="kpi-card-1">
+      <div class="kpi-label">TOTAL LISTINGS</div>
+      <div class="kpi-value"><span id="kpi-total">2,250</span></div>
+      <div class="kpi-sub" id="kpi-total-sub">UNITS ANALYZED</div>
+    </div>
+    <div class="kpi-card accent-blue" id="kpi-card-2">
+      <div class="kpi-label">AVG MARKET PRICE</div>
+      <div class="kpi-value">$<span id="kpi-avg">52,507</span></div>
+      <div class="kpi-sub" id="kpi-avg-sub">MEAN ACROSS ALL</div>
+    </div>
+    <div class="kpi-card accent-gold" id="kpi-card-3">
+      <div class="kpi-label">PRICE RANGE</div>
+      <div class="kpi-value"><span style="font-size:0.6em" id="kpi-range-min">$5K</span>&nbsp;→&nbsp;<span style="font-size:0.6em" id="kpi-range-max">$100K</span></div>
+      <div class="kpi-sub" id="kpi-range-sub">FULL SPREAD</div>
+    </div>
+    <div class="kpi-card accent-green" id="kpi-card-4">
+      <div class="kpi-label">ELECTRIC SHARE</div>
+      <div class="kpi-value"><span id="kpi-ev">24.6</span><span class="unit">%</span></div>
+      <div class="kpi-sub" id="kpi-ev-sub">OF ALL LISTINGS</div>
+    </div>
+    <div class="kpi-card accent-blue" id="kpi-card-5">
+      <div class="kpi-label" id="kpi-leader-label">PRICE LEADER</div>
+      <div class="kpi-value" id="kpi-leader-value" style="font-size:1.1em; letter-spacing:2px;">BMW</div>
+      <div class="kpi-sub" id="kpi-leader-sub">AVG $54,153</div>
+    </div>
+    <div class="kpi-card" style="--accent:var(--gold);" id="kpi-card-6">
+      <div class="kpi-label" id="kpi-premium-label">PREMIUM SEGMENT</div>
+      <div class="kpi-value" id="kpi-premium-value" style="font-size:0.7em; letter-spacing:1px;">DIESEL<br>LIKE NEW</div>
+      <div class="kpi-sub" id="kpi-premium-sub">$56,984 AVG — BEATS NEW EV</div>
+    </div>
+  </div>
+
+  <!-- ROW: RADAR + HEATMAP -->
+  <div class="row-main">
+
+    <!-- PANEL 1: BRAND DNA RADAR -->
+    <div class="panel">
+      <div class="speed-bg"></div>
+      <div class="panel-header">
+        <div class="panel-tag">PANEL 01 · BRAND PROFILE</div>
+        <div class="panel-title">BRAND DNA FINGERPRINT</div>
+        <div class="panel-insight">
+          Each polygon is a brand's identity across 5 performance axes.<br>
+          <strong>BMW leads price. Tesla leads EV adoption. Toyota is the most balanced.</strong>
+        </div>
+      </div>
+      <div class="chart-wrap">
+        <canvas id="radarChart" height="280"></canvas>
+      </div>
+    </div>
+
+    <!-- PANEL 2: CONDITION × FUEL HEATMAP -->
+    <div class="panel gold">
+      <div class="speed-bg"></div>
+      <div class="panel-header">
+        <div class="panel-tag">PANEL 02 · PRICE MATRIX</div>
+        <div class="panel-title">THE CONDITION PARADOX</div>
+        <div class="panel-insight">
+          Average price by Condition × Fuel Type.<br>
+          <strong>★ Diesel Like New ($56,984) outprices New Electric ($51,818). The market rewards provenance over powertrain.</strong>
+        </div>
+      </div>
+      <div class="heatmap" id="heatmap"></div>
+    </div>
+
+  </div>
+
+  <!-- ROW: EV TRANSITION (FULL WIDTH) -->
+  <div class="row-wide">
+    <div class="panel blue">
+      <div class="speed-bg"></div>
+      <div class="panel-header">
+        <div class="panel-tag">PANEL 03 · TEMPORAL SHIFT</div>
+        <div class="panel-title">THE FUEL TYPE TRANSITION 2000–2023</div>
+        <div class="panel-insight">
+          How the market's powertrain mix has evolved year by year.<br>
+          <strong>Electric listings have been consistently present since 2000 — this market never had a pure-fossil phase.</strong>
+        </div>
+      </div>
+      <div class="chart-wrap">
+        <canvas id="stackedChart" height="140"></canvas>
+      </div>
+    </div>
+  </div>
+
+  <!-- ROW: ERA HEATMAP + SCATTER -->
+  <div class="row-split">
+
+    <!-- PANEL 4: BRAND ERA DOMINANCE -->
+    <div class="panel purple">
+      <div class="speed-bg"></div>
+      <div class="panel-header">
+        <div class="panel-tag">PANEL 04 · MARKET SHARE</div>
+        <div class="panel-title">BRAND DOMINANCE BY ERA</div>
+        <div class="panel-insight">
+          Listing volume per brand across 5 historical eras. Darker = more dominant.<br>
+          <strong>Toyota & Mercedes hold ground in 2021–23. Ford nearly vanishes in the latest era.</strong>
+        </div>
+      </div>
+      <div id="eraGrid"></div>
+    </div>
+
+        <!-- PANEL 5: ENGINE MYTH SCATTER -->
+    <div class="panel" style="--panel-accent:var(--red); position:relative;">
+      <div class="speed-bg"></div>
+      <div class="correlation-badge">r = −0.01 &nbsp;·&nbsp; NO SIGNAL</div>
+      <div class="panel-header">
+        <div class="panel-tag">PANEL 05 · THE MYTH</div>
+        <div class="panel-title">ENGINE SIZE DOESN'T DRIVE PRICE</div>
+        <div class="panel-insight">
+          Scatter of engine displacement vs. price, colored by brand.<br>
+          <strong>Correlation is effectively zero. Brand positioning — not specs — determines value.</strong>
+        </div>
+      </div>
+      <div class="chart-wrap">
+        <canvas id="scatterChart" height="280"></canvas>
+      </div>
+    </div>
+
+  </div>
+
+  <!-- ROW: DISTRIBUTIONS (FULL WIDTH) -->
+  <div class="row-new">
+    
+    <!-- PANEL 6: HISTOGRAM -->
+    <div class="panel gold">
+      <div class="speed-bg"></div>
+      <div class="panel-header">
+        <div class="panel-tag">PANEL 06 · MARKET SPREAD</div>
+        <div class="panel-title">PRICE DISTRIBUTION</div>
+        <div class="panel-insight">
+          Frequency of listings across $10K price buckets.<br>
+          <strong>Normal distribution centered at the market average.</strong>
+        </div>
+      </div>
+      <div class="chart-wrap">
+        <canvas id="histChart" height="180"></canvas>
+      </div>
+    </div>
+
+    <!-- PANEL 7: MILEAGE SCATTER -->
+    <div class="panel" style="--panel-accent:var(--green); position:relative;">
+      <div class="speed-bg"></div>
+      <div class="correlation-badge" id="mileage-corr-badge" style="color:var(--green); border-color:var(--green);">r = 0.00 &nbsp;·&nbsp; NO SIGNAL</div>
+      <div class="panel-header">
+        <div class="panel-tag">PANEL 07 · DEPRECIATION CHECK</div>
+        <div class="panel-title">MILEAGE VS. MARKET PRICE</div>
+        <div class="panel-insight" id="mileage-insight">
+          Price impact of mileage, segregated by condition.<br>
+          <strong>Condition overrides mileage — high-mileage "Like New" outprices low-mileage "Used".</strong>
+        </div>
+      </div>
+      <div class="chart-wrap">
+        <canvas id="mileageChart" height="180"></canvas>
+      </div>
+    </div>
+
+  </div>
+      <div class="chart-wrap">
+        <canvas id="scatterChart" height="280"></canvas>
+      </div>
+    </div>
+
+  </div>
+
+</div>
+
+<!-- FOOTER -->
+<div class="footer">
+  <div class="footer-text">AUTO MARKET INTELLIGENCE · 2250 RECORDS · RACE TELEMETRY EDITION</div>
+  <div class="sector-bar">
+    <div class="sector" style="background:var(--red)"></div>
+    <div class="sector" style="background:var(--gold)"></div>
+    <div class="sector" style="background:var(--blue)"></div>
+  </div>
+</div>
+
+<div class="custom-tooltip" id="tooltip"></div>
+
+<script>
+// ─── DATA ───────────────────────────────────────────────────────────────────
+
+const BRAND_DATA = {"Tesla":{"avg_price":52677.92,"electric_pct":29.6,"auto_pct":46.8,"avg_engine":3.45,"new_pct":69.1,"count":314},"BMW":{"avg_price":54153.25,"electric_pct":26.7,"auto_pct":48.8,"avg_engine":3.48,"new_pct":67.8,"count":326},"Audi":{"avg_price":52255.47,"electric_pct":26.3,"auto_pct":46.4,"avg_engine":3.5,"new_pct":64.4,"count":323},"Ford":{"avg_price":51551.94,"electric_pct":22.5,"auto_pct":45.9,"avg_engine":3.43,"new_pct":68.4,"count":307},"Honda":{"avg_price":51812.37,"electric_pct":21.1,"auto_pct":44.9,"avg_engine":3.62,"new_pct":65.7,"count":303},"Mercedes":{"avg_price":53079.99,"electric_pct":23.3,"auto_pct":49.2,"avg_engine":3.39,"new_pct":64.4,"count":331},"Toyota":{"avg_price":51942.35,"electric_pct":22.8,"auto_pct":49.1,"avg_engine":3.53,"new_pct":61.6,"count":346}};
+
+const COND_FUEL = {"Diesel":{"Like New":56984.19,"New":52187.2,"Used":55215.93},"Electric":{"Like New":49144.44,"New":51818.43,"Used":51228.31},"Hybrid":{"Like New":54929.17,"New":50925.32,"Used":51956.0},"Petrol":{"Like New":50484.68,"New":52751.95,"Used":51744.46}};
+
+const YEAR_FUEL = [{"Year":2000,"Diesel":21,"Electric":24,"Hybrid":22,"Petrol":19},{"Year":2001,"Diesel":25,"Electric":19,"Hybrid":28,"Petrol":31},{"Year":2002,"Diesel":27,"Electric":32,"Hybrid":16,"Petrol":22},{"Year":2003,"Diesel":25,"Electric":36,"Hybrid":19,"Petrol":20},{"Year":2004,"Diesel":19,"Electric":15,"Hybrid":28,"Petrol":27},{"Year":2005,"Diesel":27,"Electric":19,"Hybrid":17,"Petrol":32},{"Year":2006,"Diesel":23,"Electric":16,"Hybrid":17,"Petrol":21},{"Year":2007,"Diesel":30,"Electric":23,"Hybrid":27,"Petrol":21},{"Year":2008,"Diesel":27,"Electric":22,"Hybrid":32,"Petrol":18},{"Year":2009,"Diesel":18,"Electric":18,"Hybrid":24,"Petrol":25},{"Year":2010,"Diesel":21,"Electric":20,"Hybrid":23,"Petrol":19},{"Year":2011,"Diesel":17,"Electric":31,"Hybrid":25,"Petrol":23},{"Year":2012,"Diesel":30,"Electric":25,"Hybrid":27,"Petrol":20},{"Year":2013,"Diesel":23,"Electric":21,"Hybrid":18,"Petrol":21},{"Year":2014,"Diesel":31,"Electric":33,"Hybrid":14,"Petrol":21},{"Year":2015,"Diesel":20,"Electric":22,"Hybrid":16,"Petrol":19},{"Year":2016,"Diesel":33,"Electric":28,"Hybrid":18,"Petrol":24},{"Year":2017,"Diesel":25,"Electric":20,"Hybrid":25,"Petrol":22},{"Year":2018,"Diesel":22,"Electric":18,"Hybrid":25,"Petrol":27},{"Year":2019,"Diesel":20,"Electric":20,"Hybrid":29,"Petrol":25},{"Year":2020,"Diesel":30,"Electric":26,"Hybrid":27,"Petrol":25},{"Year":2021,"Diesel":21,"Electric":25,"Hybrid":21,"Petrol":29},{"Year":2022,"Diesel":28,"Electric":23,"Hybrid":23,"Petrol":29},{"Year":2023,"Diesel":24,"Electric":18,"Hybrid":27,"Petrol":21}];
+
+const ERA_BRAND = {"Audi":{"2000-05":88,"2006-10":63,"2011-15":63,"2016-20":67,"2021-23":42},"BMW":{"2000-05":81,"2006-10":73,"2011-15":69,"2016-20":60,"2021-23":43},"Ford":{"2000-05":73,"2006-10":64,"2011-15":70,"2016-20":78,"2021-23":22},"Honda":{"2000-05":72,"2006-10":47,"2011-15":67,"2016-20":81,"2021-23":36},"Mercedes":{"2000-05":83,"2006-10":67,"2011-15":53,"2016-20":75,"2021-23":53},"Tesla":{"2000-05":84,"2006-10":71,"2011-15":68,"2016-20":51,"2021-23":40},"Toyota":{"2000-05":89,"2006-10":60,"2011-15":67,"2016-20":77,"2021-23":53}};
+
+const SCATTER_DATA = [{"Engine Size":3.8,"Price":62317.77,"Brand":"Ford"},{"Engine Size":1.9,"Price":53545.84,"Brand":"Audi"},{"Engine Size":2.6,"Price":33734.44,"Brand":"Mercedes"},{"Engine Size":3.9,"Price":85432.22,"Brand":"Mercedes"},{"Engine Size":3.7,"Price":17418.43,"Brand":"Ford"},{"Engine Size":4.7,"Price":79561.1,"Brand":"Mercedes"},{"Engine Size":3.2,"Price":58403.72,"Brand":"Audi"},{"Engine Size":1.2,"Price":64002.04,"Brand":"Toyota"},{"Engine Size":3.2,"Price":34637.95,"Brand":"Ford"},{"Engine Size":4.2,"Price":97511.18,"Brand":"BMW"},{"Engine Size":1.5,"Price":93917.45,"Brand":"BMW"},{"Engine Size":3.1,"Price":38067.23,"Brand":"Mercedes"},{"Engine Size":2.5,"Price":60928.69,"Brand":"Ford"},{"Engine Size":2.6,"Price":82465.8,"Brand":"Tesla"},{"Engine Size":3.4,"Price":31643.75,"Brand":"Mercedes"},{"Engine Size":1.2,"Price":10315.81,"Brand":"Toyota"},{"Engine Size":3.3,"Price":15212.37,"Brand":"Audi"},{"Engine Size":1.3,"Price":83021.14,"Brand":"BMW"},{"Engine Size":2.3,"Price":59853.9,"Brand":"Honda"},{"Engine Size":2.2,"Price":52430.24,"Brand":"BMW"},{"Engine Size":4.8,"Price":27998.42,"Brand":"Mercedes"},{"Engine Size":2.7,"Price":50000.1,"Brand":"Mercedes"},{"Engine Size":2.4,"Price":10257.49,"Brand":"Toyota"},{"Engine Size":1.1,"Price":61179.02,"Brand":"Tesla"},{"Engine Size":5.8,"Price":48512.26,"Brand":"Toyota"},{"Engine Size":4.8,"Price":57124.3,"Brand":"Mercedes"},{"Engine Size":1.3,"Price":25330.0,"Brand":"Tesla"},{"Engine Size":3.9,"Price":59133.42,"Brand":"Honda"},{"Engine Size":2.9,"Price":10708.09,"Brand":"BMW"},{"Engine Size":5.0,"Price":88591.02,"Brand":"Tesla"},{"Engine Size":2.2,"Price":79831.68,"Brand":"Audi"},{"Engine Size":4.7,"Price":58675.0,"Brand":"Ford"},{"Engine Size":5.5,"Price":32688.55,"Brand":"Tesla"},{"Engine Size":2.2,"Price":66332.39,"Brand":"Audi"},{"Engine Size":1.9,"Price":85753.79,"Brand":"Audi"},{"Engine Size":3.4,"Price":46834.12,"Brand":"Mercedes"},{"Engine Size":2.2,"Price":88815.61,"Brand":"Honda"},{"Engine Size":5.8,"Price":91804.89,"Brand":"Ford"},{"Engine Size":1.8,"Price":48550.46,"Brand":"Honda"},{"Engine Size":2.7,"Price":52019.54,"Brand":"Ford"},{"Engine Size":4.1,"Price":27025.29,"Brand":"Toyota"},{"Engine Size":3.4,"Price":94132.36,"Brand":"Toyota"},{"Engine Size":3.0,"Price":23171.5,"Brand":"Tesla"},{"Engine Size":1.8,"Price":26352.59,"Brand":"Audi"},{"Engine Size":4.0,"Price":26109.68,"Brand":"Mercedes"},{"Engine Size":4.5,"Price":93779.23,"Brand":"Audi"},{"Engine Size":5.1,"Price":8072.8,"Brand":"Tesla"},{"Engine Size":2.2,"Price":63775.3,"Brand":"Ford"},{"Engine Size":1.4,"Price":5353.03,"Brand":"Mercedes"},{"Engine Size":2.2,"Price":67076.17,"Brand":"Toyota"}];
+
+// ─── COLORS ─────────────────────────────────────────────────────────────────
+
+const BRAND_COLORS = {
+  BMW:      '#00d4ff',
+  Mercedes: '#ffd200',
+  Tesla:    '#ff3c00',
+  Audi:     '#b060ff',
+  Toyota:   '#00ff88',
+  Ford:     '#ff8c00',
+  Honda:    '#ff4466',
+};
+
+const FUEL_COLORS = {
+  Petrol:   '#ff8c00',
+  Diesel:   '#ffd200',
+  Hybrid:   '#00ff88',
+  Electric: '#00d4ff',
+};
+
+const BRANDS = ['Tesla','BMW','Audi','Ford','Honda','Mercedes','Toyota'];
+const ERAS   = ['2000-05','2006-10','2011-15','2016-20','2021-23'];
+const FUELS  = ['Petrol','Diesel','Hybrid','Electric'];
+const CONDITIONS = ['New','Like New','Used'];
+
+const BRAND_YEAR_FUEL = {"Tesla": [{"Year": 2000, "Petrol": 0, "Diesel": 0, "Hybrid": 0, "Electric": 7}, {"Year": 2001, "Petrol": 0, "Diesel": 0, "Hybrid": 0, "Electric": 18}, {"Year": 2002, "Petrol": 0, "Diesel": 0, "Hybrid": 0, "Electric": 18}, {"Year": 2003, "Petrol": 0, "Diesel": 0, "Hybrid": 0, "Electric": 16}, {"Year": 2004, "Petrol": 0, "Diesel": 0, "Hybrid": 0, "Electric": 11}, {"Year": 2005, "Petrol": 0, "Diesel": 0, "Hybrid": 0, "Electric": 14}, {"Year": 2006, "Petrol": 0, "Diesel": 0, "Hybrid": 0, "Electric": 11}, {"Year": 2007, "Petrol": 0, "Diesel": 0, "Hybrid": 0, "Electric": 13}, {"Year": 2008, "Petrol": 0, "Diesel": 0, "Hybrid": 0, "Electric": 14}, {"Year": 2009, "Petrol": 0, "Diesel": 0, "Hybrid": 0, "Electric": 18}, {"Year": 2010, "Petrol": 0, "Diesel": 0, "Hybrid": 0, "Electric": 15}, {"Year": 2011, "Petrol": 0, "Diesel": 0, "Hybrid": 0, "Electric": 14}, {"Year": 2012, "Petrol": 0, "Diesel": 0, "Hybrid": 0, "Electric": 12}, {"Year": 2013, "Petrol": 0, "Diesel": 0, "Hybrid": 0, "Electric": 12}, {"Year": 2014, "Petrol": 0, "Diesel": 0, "Hybrid": 0, "Electric": 17}, {"Year": 2015, "Petrol": 0, "Diesel": 0, "Hybrid": 0, "Electric": 13}, {"Year": 2016, "Petrol": 0, "Diesel": 0, "Hybrid": 0, "Electric": 12}, {"Year": 2017, "Petrol": 0, "Diesel": 0, "Hybrid": 0, "Electric": 11}, {"Year": 2018, "Petrol": 0, "Diesel": 0, "Hybrid": 0, "Electric": 6}, {"Year": 2019, "Petrol": 0, "Diesel": 0, "Hybrid": 0, "Electric": 8}, {"Year": 2020, "Petrol": 0, "Diesel": 0, "Hybrid": 0, "Electric": 14}, {"Year": 2021, "Petrol": 0, "Diesel": 0, "Hybrid": 0, "Electric": 15}, {"Year": 2022, "Petrol": 0, "Diesel": 0, "Hybrid": 0, "Electric": 13}, {"Year": 2023, "Petrol": 0, "Diesel": 0, "Hybrid": 0, "Electric": 12}], "BMW": [{"Year": 2000, "Petrol": 3, "Diesel": 1, "Hybrid": 3, "Electric": 5}, {"Year": 2001, "Petrol": 4, "Diesel": 4, "Hybrid": 3, "Electric": 1}, {"Year": 2002, "Petrol": 2, "Diesel": 2, "Hybrid": 5, "Electric": 5}, {"Year": 2003, "Petrol": 2, "Diesel": 4, "Hybrid": 3, "Electric": 4}, {"Year": 2004, "Petrol": 5, "Diesel": 4, "Hybrid": 3, "Electric": 1}, {"Year": 2005, "Petrol": 5, "Diesel": 3, "Hybrid": 2, "Electric": 7}, {"Year": 2006, "Petrol": 2, "Diesel": 6, "Hybrid": 5, "Electric": 1}, {"Year": 2007, "Petrol": 1, "Diesel": 4, "Hybrid": 4, "Electric": 5}, {"Year": 2008, "Petrol": 5, "Diesel": 6, "Hybrid": 3, "Electric": 5}, {"Year": 2009, "Petrol": 6, "Diesel": 0, "Hybrid": 3, "Electric": 2}, {"Year": 2010, "Petrol": 2, "Diesel": 4, "Hybrid": 4, "Electric": 5}, {"Year": 2011, "Petrol": 1, "Diesel": 0, "Hybrid": 4, "Electric": 3}, {"Year": 2012, "Petrol": 4, "Diesel": 4, "Hybrid": 4, "Electric": 4}, {"Year": 2013, "Petrol": 2, "Diesel": 7, "Hybrid": 3, "Electric": 3}, {"Year": 2014, "Petrol": 5, "Diesel": 5, "Hybrid": 2, "Electric": 6}, {"Year": 2015, "Petrol": 4, "Diesel": 4, "Hybrid": 2, "Electric": 2}, {"Year": 2016, "Petrol": 2, "Diesel": 7, "Hybrid": 1, "Electric": 4}, {"Year": 2017, "Petrol": 0, "Diesel": 3, "Hybrid": 3, "Electric": 2}, {"Year": 2018, "Petrol": 3, "Diesel": 1, "Hybrid": 1, "Electric": 3}, {"Year": 2019, "Petrol": 3, "Diesel": 0, "Hybrid": 3, "Electric": 5}, {"Year": 2020, "Petrol": 4, "Diesel": 4, "Hybrid": 4, "Electric": 7}, {"Year": 2021, "Petrol": 7, "Diesel": 1, "Hybrid": 4, "Electric": 3}, {"Year": 2022, "Petrol": 8, "Diesel": 5, "Hybrid": 3, "Electric": 1}, {"Year": 2023, "Petrol": 3, "Diesel": 3, "Hybrid": 2, "Electric": 3}], "Audi": [{"Year": 2000, "Petrol": 3, "Diesel": 5, "Hybrid": 4, "Electric": 4}, {"Year": 2001, "Petrol": 5, "Diesel": 4, "Hybrid": 5, "Electric": 6}, {"Year": 2002, "Petrol": 3, "Diesel": 6, "Hybrid": 1, "Electric": 6}, {"Year": 2003, "Petrol": 4, "Diesel": 3, "Hybrid": 0, "Electric": 6}, {"Year": 2004, "Petrol": 5, "Diesel": 2, "Hybrid": 6, "Electric": 0}, {"Year": 2005, "Petrol": 4, "Diesel": 2, "Hybrid": 2, "Electric": 2}, {"Year": 2006, "Petrol": 5, "Diesel": 3, "Hybrid": 3, "Electric": 4}, {"Year": 2007, "Petrol": 2, "Diesel": 3, "Hybrid": 3, "Electric": 2}, {"Year": 2008, "Petrol": 3, "Diesel": 1, "Hybrid": 6, "Electric": 2}, {"Year": 2009, "Petrol": 5, "Diesel": 4, "Hybrid": 4, "Electric": 5}, {"Year": 2010, "Petrol": 3, "Diesel": 1, "Hybrid": 3, "Electric": 1}, {"Year": 2011, "Petrol": 3, "Diesel": 5, "Hybrid": 1, "Electric": 5}, {"Year": 2012, "Petrol": 5, "Diesel": 4, "Hybrid": 4, "Electric": 4}, {"Year": 2013, "Petrol": 4, "Diesel": 3, "Hybrid": 2, "Electric": 5}, {"Year": 2014, "Petrol": 1, "Diesel": 3, "Hybrid": 3, "Electric": 2}, {"Year": 2015, "Petrol": 2, "Diesel": 1, "Hybrid": 2, "Electric": 4}, {"Year": 2016, "Petrol": 6, "Diesel": 3, "Hybrid": 1, "Electric": 4}, {"Year": 2017, "Petrol": 3, "Diesel": 6, "Hybrid": 1, "Electric": 2}, {"Year": 2018, "Petrol": 2, "Diesel": 4, "Hybrid": 4, "Electric": 2}, {"Year": 2019, "Petrol": 3, "Diesel": 2, "Hybrid": 8, "Electric": 1}, {"Year": 2020, "Petrol": 4, "Diesel": 4, "Hybrid": 2, "Electric": 5}, {"Year": 2021, "Petrol": 2, "Diesel": 5, "Hybrid": 4, "Electric": 5}, {"Year": 2022, "Petrol": 2, "Diesel": 3, "Hybrid": 2, "Electric": 3}, {"Year": 2023, "Petrol": 4, "Diesel": 5, "Hybrid": 2, "Electric": 5}], "Ford": [{"Year": 2000, "Petrol": 2, "Diesel": 3, "Hybrid": 2, "Electric": 3}, {"Year": 2001, "Petrol": 4, "Diesel": 3, "Hybrid": 4, "Electric": 1}, {"Year": 2002, "Petrol": 3, "Diesel": 2, "Hybrid": 2, "Electric": 3}, {"Year": 2003, "Petrol": 1, "Diesel": 2, "Hybrid": 0, "Electric": 7}, {"Year": 2004, "Petrol": 5, "Diesel": 3, "Hybrid": 4, "Electric": 5}, {"Year": 2005, "Petrol": 4, "Diesel": 5, "Hybrid": 3, "Electric": 2}, {"Year": 2006, "Petrol": 2, "Diesel": 2, "Hybrid": 4, "Electric": 0}, {"Year": 2007, "Petrol": 4, "Diesel": 7, "Hybrid": 3, "Electric": 2}, {"Year": 2008, "Petrol": 3, "Diesel": 3, "Hybrid": 3, "Electric": 3}, {"Year": 2009, "Petrol": 0, "Diesel": 4, "Hybrid": 5, "Electric": 1}, {"Year": 2010, "Petrol": 5, "Diesel": 6, "Hybrid": 4, "Electric": 3}, {"Year": 2011, "Petrol": 7, "Diesel": 1, "Hybrid": 4, "Electric": 7}, {"Year": 2012, "Petrol": 5, "Diesel": 4, "Hybrid": 4, "Electric": 3}, {"Year": 2013, "Petrol": 3, "Diesel": 3, "Hybrid": 2, "Electric": 0}, {"Year": 2014, "Petrol": 4, "Diesel": 5, "Hybrid": 3, "Electric": 6}, {"Year": 2015, "Petrol": 2, "Diesel": 2, "Hybrid": 2, "Electric": 3}, {"Year": 2016, "Petrol": 4, "Diesel": 7, "Hybrid": 3, "Electric": 2}, {"Year": 2017, "Petrol": 2, "Diesel": 3, "Hybrid": 6, "Electric": 3}, {"Year": 2018, "Petrol": 4, "Diesel": 3, "Hybrid": 2, "Electric": 5}, {"Year": 2019, "Petrol": 5, "Diesel": 2, "Hybrid": 5, "Electric": 5}, {"Year": 2020, "Petrol": 4, "Diesel": 4, "Hybrid": 5, "Electric": 4}, {"Year": 2021, "Petrol": 5, "Diesel": 2, "Hybrid": 2, "Electric": 1}, {"Year": 2022, "Petrol": 2, "Diesel": 1, "Hybrid": 2, "Electric": 0}, {"Year": 2023, "Petrol": 3, "Diesel": 3, "Hybrid": 1, "Electric": 0}], "Honda": [{"Year": 2000, "Petrol": 4, "Diesel": 3, "Hybrid": 1, "Electric": 4}, {"Year": 2001, "Petrol": 4, "Diesel": 3, "Hybrid": 4, "Electric": 4}, {"Year": 2002, "Petrol": 4, "Diesel": 2, "Hybrid": 0, "Electric": 4}, {"Year": 2003, "Petrol": 1, "Diesel": 5, "Hybrid": 2, "Electric": 6}, {"Year": 2004, "Petrol": 1, "Diesel": 2, "Hybrid": 6, "Electric": 0}, {"Year": 2005, "Petrol": 6, "Diesel": 4, "Hybrid": 1, "Electric": 1}, {"Year": 2006, "Petrol": 4, "Diesel": 2, "Hybrid": 1, "Electric": 5}, {"Year": 2007, "Petrol": 1, "Diesel": 4, "Hybrid": 4, "Electric": 4}, {"Year": 2008, "Petrol": 1, "Diesel": 5, "Hybrid": 2, "Electric": 2}, {"Year": 2009, "Petrol": 2, "Diesel": 0, "Hybrid": 2, "Electric": 1}, {"Year": 2010, "Petrol": 2, "Diesel": 1, "Hybrid": 3, "Electric": 1}, {"Year": 2011, "Petrol": 5, "Diesel": 2, "Hybrid": 4, "Electric": 3}, {"Year": 2012, "Petrol": 3, "Diesel": 5, "Hybrid": 4, "Electric": 2}, {"Year": 2013, "Petrol": 3, "Diesel": 1, "Hybrid": 4, "Electric": 3}, {"Year": 2014, "Petrol": 1, "Diesel": 5, "Hybrid": 1, "Electric": 5}, {"Year": 2015, "Petrol": 5, "Diesel": 4, "Hybrid": 3, "Electric": 4}, {"Year": 2016, "Petrol": 3, "Diesel": 9, "Hybrid": 3, "Electric": 4}, {"Year": 2017, "Petrol": 1, "Diesel": 6, "Hybrid": 7, "Electric": 0}, {"Year": 2018, "Petrol": 5, "Diesel": 6, "Hybrid": 7, "Electric": 1}, {"Year": 2019, "Petrol": 3, "Diesel": 4, "Hybrid": 4, "Electric": 1}, {"Year": 2020, "Petrol": 5, "Diesel": 4, "Hybrid": 6, "Electric": 2}, {"Year": 2021, "Petrol": 3, "Diesel": 1, "Hybrid": 2, "Electric": 3}, {"Year": 2022, "Petrol": 3, "Diesel": 6, "Hybrid": 4, "Electric": 2}, {"Year": 2023, "Petrol": 3, "Diesel": 2, "Hybrid": 5, "Electric": 2}], "Mercedes": [{"Year": 2000, "Petrol": 3, "Diesel": 3, "Hybrid": 7, "Electric": 2}, {"Year": 2001, "Petrol": 3, "Diesel": 4, "Hybrid": 0, "Electric": 1}, {"Year": 2002, "Petrol": 4, "Diesel": 6, "Hybrid": 3, "Electric": 5}, {"Year": 2003, "Petrol": 6, "Diesel": 4, "Hybrid": 5, "Electric": 4}, {"Year": 2004, "Petrol": 4, "Diesel": 3, "Hybrid": 2, "Electric": 2}, {"Year": 2005, "Petrol": 5, "Diesel": 2, "Hybrid": 1, "Electric": 4}, {"Year": 2006, "Petrol": 1, "Diesel": 4, "Hybrid": 1, "Electric": 3}, {"Year": 2007, "Petrol": 7, "Diesel": 5, "Hybrid": 6, "Electric": 3}, {"Year": 2008, "Petrol": 2, "Diesel": 4, "Hybrid": 6, "Electric": 1}, {"Year": 2009, "Petrol": 6, "Diesel": 1, "Hybrid": 3, "Electric": 3}, {"Year": 2010, "Petrol": 3, "Diesel": 3, "Hybrid": 0, "Electric": 5}, {"Year": 2011, "Petrol": 2, "Diesel": 5, "Hybrid": 6, "Electric": 2}, {"Year": 2012, "Petrol": 1, "Diesel": 4, "Hybrid": 2, "Electric": 2}, {"Year": 2013, "Petrol": 5, "Diesel": 2, "Hybrid": 2, "Electric": 2}, {"Year": 2014, "Petrol": 3, "Diesel": 4, "Hybrid": 0, "Electric": 4}, {"Year": 2015, "Petrol": 2, "Diesel": 2, "Hybrid": 2, "Electric": 1}, {"Year": 2016, "Petrol": 3, "Diesel": 1, "Hybrid": 1, "Electric": 5}, {"Year": 2017, "Petrol": 8, "Diesel": 1, "Hybrid": 2, "Electric": 8}, {"Year": 2018, "Petrol": 6, "Diesel": 1, "Hybrid": 6, "Electric": 1}, {"Year": 2019, "Petrol": 5, "Diesel": 3, "Hybrid": 2, "Electric": 5}, {"Year": 2020, "Petrol": 5, "Diesel": 4, "Hybrid": 5, "Electric": 3}, {"Year": 2021, "Petrol": 7, "Diesel": 6, "Hybrid": 4, "Electric": 4}, {"Year": 2022, "Petrol": 5, "Diesel": 2, "Hybrid": 5, "Electric": 6}, {"Year": 2023, "Petrol": 2, "Diesel": 4, "Hybrid": 7, "Electric": 1}], "Toyota": [{"Year": 2000, "Petrol": 3, "Diesel": 5, "Hybrid": 3, "Electric": 3}, {"Year": 2001, "Petrol": 5, "Diesel": 5, "Hybrid": 4, "Electric": 4}, {"Year": 2002, "Petrol": 3, "Diesel": 2, "Hybrid": 2, "Electric": 4}, {"Year": 2003, "Petrol": 2, "Diesel": 4, "Hybrid": 5, "Electric": 4}, {"Year": 2004, "Petrol": 5, "Diesel": 2, "Hybrid": 5, "Electric": 3}, {"Year": 2005, "Petrol": 7, "Diesel": 7, "Hybrid": 1, "Electric": 1}, {"Year": 2006, "Petrol": 2, "Diesel": 2, "Hybrid": 2, "Electric": 2}, {"Year": 2007, "Petrol": 4, "Diesel": 3, "Hybrid": 5, "Electric": 2}, {"Year": 2008, "Petrol": 3, "Diesel": 6, "Hybrid": 5, "Electric": 5}, {"Year": 2009, "Petrol": 2, "Diesel": 2, "Hybrid": 3, "Electric": 3}, {"Year": 2010, "Petrol": 1, "Diesel": 3, "Hybrid": 3, "Electric": 2}, {"Year": 2011, "Petrol": 2, "Diesel": 2, "Hybrid": 2, "Electric": 6}, {"Year": 2012, "Petrol": 2, "Diesel": 4, "Hybrid": 5, "Electric": 7}, {"Year": 2013, "Petrol": 1, "Diesel": 4, "Hybrid": 4, "Electric": 3}, {"Year": 2014, "Petrol": 4, "Diesel": 6, "Hybrid": 2, "Electric": 2}, {"Year": 2015, "Petrol": 1, "Diesel": 5, "Hybrid": 1, "Electric": 4}, {"Year": 2016, "Petrol": 1, "Diesel": 6, "Hybrid": 5, "Electric": 6}, {"Year": 2017, "Petrol": 5, "Diesel": 3, "Hybrid": 4, "Electric": 2}, {"Year": 2018, "Petrol": 6, "Diesel": 4, "Hybrid": 4, "Electric": 5}, {"Year": 2019, "Petrol": 4, "Diesel": 9, "Hybrid": 3, "Electric": 1}, {"Year": 2020, "Petrol": 1, "Diesel": 3, "Hybrid": 3, "Electric": 2}, {"Year": 2021, "Petrol": 1, "Diesel": 3, "Hybrid": 4, "Electric": 2}, {"Year": 2022, "Petrol": 8, "Diesel": 8, "Hybrid": 5, "Electric": 4}, {"Year": 2023, "Petrol": 5, "Diesel": 2, "Hybrid": 9, "Electric": 2}]} ;
+
+const PRICE_HIST = {
+  ALL: [121, 239, 229, 234, 241, 243, 225, 254, 237, 227],
+  Tesla: [15, 36, 37, 34, 28, 31, 25, 35, 46, 27],
+  BMW: [19, 36, 27, 26, 28, 39, 44, 41, 28, 38],
+  Audi: [20, 28, 30, 40, 43, 30, 33, 35, 25, 39],
+  Ford: [16, 30, 38, 37, 30, 28, 36, 32, 31, 29],
+  Honda: [13, 29, 36, 34, 31, 39, 33, 34, 30, 24],
+  Mercedes: [23, 36, 29, 32, 36, 34, 24, 40, 38, 39],
+  Toyota: [15, 44, 32, 31, 45, 42, 30, 37, 39, 31],
+};
+
+const MILEAGE_DATA = [{"Mileage": 290515, "Price": 83929.54, "Condition": "New", "Brand": "Tesla"}, {"Mileage": 30531, "Price": 14812.88, "Condition": "New", "Brand": "Tesla"}, {"Mileage": 256160, "Price": 63673.84, "Condition": "New", "Brand": "Tesla"}, {"Mileage": 110205, "Price": 64335.6, "Condition": "Like New", "Brand": "Tesla"}, {"Mileage": 264509, "Price": 20433.72, "Condition": "Used", "Brand": "Tesla"}, {"Mileage": 134670, "Price": 57859.82, "Condition": "New", "Brand": "Tesla"}, {"Mileage": 177175, "Price": 88591.02, "Condition": "New", "Brand": "Tesla"}, {"Mileage": 144294, "Price": 49393.1, "Condition": "New", "Brand": "Tesla"}, {"Mileage": 210171, "Price": 82974.33, "Condition": "Used", "Brand": "Tesla"}, {"Mileage": 129909, "Price": 70585.87, "Condition": "New", "Brand": "Tesla"}, {"Mileage": 206205, "Price": 28978.91, "Condition": "Like New", "Brand": "BMW"}, {"Mileage": 161929, "Price": 96941.02, "Condition": "Used", "Brand": "BMW"}, {"Mileage": 254084, "Price": 68037.91, "Condition": "Used", "Brand": "BMW"}, {"Mileage": 16116, "Price": 93712.71, "Condition": "Like New", "Brand": "BMW"}, {"Mileage": 10360, "Price": 87013.83, "Condition": "New", "Brand": "BMW"}, {"Mileage": 137877, "Price": 78956.84, "Condition": "Used", "Brand": "BMW"}, {"Mileage": 168332, "Price": 24135.18, "Condition": "Used", "Brand": "BMW"}, {"Mileage": 38059, "Price": 78531.99, "Condition": "Used", "Brand": "BMW"}, {"Mileage": 177505, "Price": 43126.91, "Condition": "Used", "Brand": "BMW"}, {"Mileage": 200123, "Price": 38162.84, "Condition": "New", "Brand": "BMW"}, {"Mileage": 13769, "Price": 80236.67, "Condition": "Like New", "Brand": "Audi"}, {"Mileage": 95287, "Price": 46049.78, "Condition": "New", "Brand": "Audi"}, {"Mileage": 34512, "Price": 61282.1, "Condition": "New", "Brand": "Audi"}, {"Mileage": 15141, "Price": 24602.19, "Condition": "Used", "Brand": "Audi"}, {"Mileage": 125349, "Price": 59265.27, "Condition": "Used", "Brand": "Audi"}, {"Mileage": 36080, "Price": 48228.1, "Condition": "Like New", "Brand": "Audi"}, {"Mileage": 206096, "Price": 11200.65, "Condition": "Used", "Brand": "Audi"}, {"Mileage": 263894, "Price": 70193.74, "Condition": "Like New", "Brand": "Audi"}, {"Mileage": 149177, "Price": 11829.5, "Condition": "Used", "Brand": "Audi"}, {"Mileage": 152110, "Price": 97323.32, "Condition": "Like New", "Brand": "Audi"}, {"Mileage": 162553, "Price": 70936.28, "Condition": "Used", "Brand": "Ford"}, {"Mileage": 63146, "Price": 12877.16, "Condition": "Used", "Brand": "Ford"}, {"Mileage": 153060, "Price": 83509.42, "Condition": "Used", "Brand": "Ford"}, {"Mileage": 261968, "Price": 87828.26, "Condition": "Like New", "Brand": "Ford"}, {"Mileage": 234347, "Price": 48632.89, "Condition": "Like New", "Brand": "Ford"}, {"Mileage": 247174, "Price": 24543.86, "Condition": "Used", "Brand": "Ford"}, {"Mileage": 29714, "Price": 66342.48, "Condition": "Used", "Brand": "Ford"}, {"Mileage": 91654, "Price": 94282.73, "Condition": "Like New", "Brand": "Ford"}, {"Mileage": 31589, "Price": 37203.39, "Condition": "Used", "Brand": "Ford"}, {"Mileage": 256349, "Price": 11146.53, "Condition": "Like New", "Brand": "Ford"}, {"Mileage": 48115, "Price": 42423.63, "Condition": "New", "Brand": "Honda"}, {"Mileage": 214096, "Price": 67578.81, "Condition": "Used", "Brand": "Honda"}, {"Mileage": 56697, "Price": 8075.66, "Condition": "Like New", "Brand": "Honda"}, {"Mileage": 55746, "Price": 20227.88, "Condition": "Used", "Brand": "Honda"}, {"Mileage": 255745, "Price": 83758.57, "Condition": "New", "Brand": "Honda"}, {"Mileage": 201264, "Price": 72013.84, "Condition": "Used", "Brand": "Honda"}, {"Mileage": 186131, "Price": 15595.67, "Condition": "New", "Brand": "Honda"}, {"Mileage": 227561, "Price": 85357.36, "Condition": "Like New", "Brand": "Honda"}, {"Mileage": 289176, "Price": 59687.83, "Condition": "Used", "Brand": "Honda"}, {"Mileage": 104987, "Price": 39710.85, "Condition": "Like New", "Brand": "Honda"}, {"Mileage": 94182, "Price": 40165.52, "Condition": "Like New", "Brand": "Mercedes"}, {"Mileage": 91665, "Price": 89113.7, "Condition": "New", "Brand": "Mercedes"}, {"Mileage": 2526, "Price": 7102.22, "Condition": "Like New", "Brand": "Mercedes"}, {"Mileage": 40491, "Price": 5931.77, "Condition": "Like New", "Brand": "Mercedes"}, {"Mileage": 27209, "Price": 46834.12, "Condition": "New", "Brand": "Mercedes"}, {"Mileage": 290690, "Price": 10605.32, "Condition": "New", "Brand": "Mercedes"}, {"Mileage": 294786, "Price": 78461.24, "Condition": "New", "Brand": "Mercedes"}, {"Mileage": 197745, "Price": 79698.2, "Condition": "New", "Brand": "Mercedes"}, {"Mileage": 66697, "Price": 97593.83, "Condition": "Like New", "Brand": "Mercedes"}, {"Mileage": 286885, "Price": 25199.35, "Condition": "Like New", "Brand": "Mercedes"}, {"Mileage": 125806, "Price": 60725.99, "Condition": "New", "Brand": "Toyota"}, {"Mileage": 299355, "Price": 40601.34, "Condition": "Like New", "Brand": "Toyota"}, {"Mileage": 3420, "Price": 14395.92, "Condition": "Like New", "Brand": "Toyota"}, {"Mileage": 216854, "Price": 59551.72, "Condition": "New", "Brand": "Toyota"}, {"Mileage": 48807, "Price": 42708.54, "Condition": "Like New", "Brand": "Toyota"}, {"Mileage": 45313, "Price": 70375.88, "Condition": "Used", "Brand": "Toyota"}, {"Mileage": 90481, "Price": 62302.94, "Condition": "New", "Brand": "Toyota"}, {"Mileage": 249091, "Price": 40537.67, "Condition": "Used", "Brand": "Toyota"}, {"Mileage": 12823, "Price": 37221.49, "Condition": "Like New", "Brand": "Toyota"}, {"Mileage": 230517, "Price": 27011.56, "Condition": "Like New", "Brand": "Toyota"}] ;
+
+const BRAND_FUEL_AVG = {"Tesla": {"Petrol": 0, "Diesel": 0, "Hybrid": 0, "Electric": 52677.92}, "BMW": {"Petrol": 51267.31, "Diesel": 58998.33, "Hybrid": 55445.77, "Electric": 51240.5}, "Audi": {"Petrol": 49682.34, "Diesel": 57199.8, "Hybrid": 50926.04, "Electric": 51139.96}, "Ford": {"Petrol": 55026.19, "Diesel": 53371.52, "Hybrid": 52823.02, "Electric": 43881.52}, "Honda": {"Petrol": 51369.46, "Diesel": 50596.59, "Hybrid": 54839.74, "Electric": 50167.07}, "Mercedes": {"Petrol": 53063.69, "Diesel": 53854.03, "Hybrid": 50141.23, "Electric": 55293.57}, "Toyota": {"Petrol": 50094.63, "Diesel": 54611.27, "Hybrid": 52361.96, "Electric": 49915.57}} ;
+
+const BRAND_MINMAX = {"Tesla": {"min": 5343.23, "max": 99905.9}, "BMW": {"min": 5107.22, "max": 99968.62}, "Audi": {"min": 5011.27, "max": 99982.59}, "Ford": {"min": 5247.71, "max": 99153.11}, "Honda": {"min": 5060.75, "max": 99578.74}, "Mercedes": {"min": 5353.03, "max": 99159.41}, "Toyota": {"min": 5472.39, "max": 99400.47}} ;
+
+
+let activeBrand = 'ALL';
+let radarChart, stackedChart, scatterChart, histChart, mileageChart;
+
+// ─── CHART.JS DEFAULTS ───────────────────────────────────────────────────────
+
+Chart.defaults.color = '#5a5a7a';
+Chart.defaults.font.family = "'JetBrains Mono', monospace";
+Chart.defaults.font.size = 10;
+
+// ─── RADAR ──────────────────────────────────────────────────────────────────
+
+function buildRadar(filterBrand) {
+  const ctx = document.getElementById('radarChart').getContext('2d');
+  if (radarChart) radarChart.destroy();
+
+  const brands = filterBrand === 'ALL' ? BRANDS : [filterBrand];
+
+  // Normalize each axis to 0-100
+  const priceMin = 51000, priceMax = 55000;
+  const normalize = {
+    avg_price:    v => ((v - priceMin)/(priceMax - priceMin))*100,
+    electric_pct: v => v,
+    auto_pct:     v => v,
+    avg_engine:   v => ((v - 3.2)/(4.0 - 3.2))*100,
+    new_pct:      v => v,
+  };
+
+  const datasets = brands.map(b => {
+    const d = BRAND_DATA[b];
+    const vals = [
+      Math.max(0, normalize.avg_price(d.avg_price)),
+      normalize.electric_pct(d.electric_pct),
+      normalize.auto_pct(d.auto_pct),
+      Math.max(0, normalize.avg_engine(d.avg_engine)),
+      normalize.new_pct(d.new_pct),
+    ];
+    const c = BRAND_COLORS[b];
+    return {
+      label: b,
+      data: vals,
+      borderColor: c,
+      backgroundColor: c + '22',
+      borderWidth: filterBrand === 'ALL' ? 1.5 : 2.5,
+      pointBackgroundColor: c,
+      pointBorderColor: '#080810',
+      pointRadius: 4,
+      pointHoverRadius: 6,
+    };
+  });
+
+  radarChart = new Chart(ctx, {
+    type: 'radar',
+    data: {
+      labels: ['AVG PRICE','EV ADOPTION %','AUTO TX %','ENGINE SIZE','NEW/LIKE-NEW %'],
+      datasets
+    },
+    options: {
+      responsive:true,
+      animation: { duration: 600 },
+      scales: {
+        r: {
+          min:0, max:100,
+          angleLines: { color: 'rgba(255,255,255,0.05)' },
+          grid: { color: 'rgba(255,255,255,0.05)' },
+          pointLabels: {
+            font: { family:"'JetBrains Mono'", size:9 },
+            color: '#5a5a7a',
+          },
+          ticks: { display:false },
+        }
+      },
+      plugins: {
+        legend: {
+          position:'bottom',
+          labels: {
+            color: '#9090b0',
+            font: { family:"'JetBrains Mono'", size:9 },
+            boxWidth:10,
+            padding:14,
+          }
+        },
+        tooltip: {
+          callbacks: {
+            label: ctx => ` ${ctx.dataset.label}: ${ctx.raw.toFixed(1)}`
+          }
+        }
+      }
+    }
+  });
+}
+
+// ─── HEATMAP ─────────────────────────────────────────────────────────────────
+
+function buildHeatmap() {
+  const container = document.getElementById('heatmap');
+  const fuels = ['Diesel','Hybrid','Petrol','Electric'];
+  const conds = ['Like New','New','Used'];
+
+  let allVals = [];
+  fuels.forEach(f => conds.forEach(c => allVals.push(COND_FUEL[f][c])));
+  const minV = Math.min(...allVals), maxV = Math.max(...allVals);
+
+  const lerp = (a,b,t) => a + (b-a)*t;
+  function cellColor(val) {
+    const t = (val - minV)/(maxV - minV);
+    const r = Math.round(lerp(14, 0, t));
+    const g = Math.round(lerp(14, 180, t));
+    const b2 = Math.round(lerp(26, 255, t));
+    return `rgba(${r},${g},${b2},${0.15 + t*0.55})`;
+  }
+
+  let html = '<table><thead><tr><th class="row-head"></th>';
+  conds.forEach(c => { html += `<th>${c.toUpperCase()}</th>`; });
+  html += '</tr></thead><tbody>';
+
+  fuels.forEach(f => {
+    html += `<tr><td class="row-label">${f.toUpperCase()}</td>`;
+    conds.forEach(c => {
+      const val = COND_FUEL[f][c];
+      const isChamp = (f === 'Diesel' && c === 'Like New');
+      const bg = cellColor(val);
+      const bright = (val - minV)/(maxV - minV) > 0.6;
+      html += `<td style="background:${bg};color:${bright?'#e8e8f0':'#9090b0'}" 
+               class="${isChamp ? 'champion' : ''}"
+               title="${f} ${c}: $${val.toLocaleString()}">
+               $${(val/1000).toFixed(1)}K</td>`;
+    });
+    html += '</tr>';
+  });
+
+  html += '</tbody></table>';
+  container.innerHTML = html;
+}
+
+
+// ─── KPI UPDATES ─────────────────────────────────────────────────────────────
+
+function updateElementContent(id, content) {
+  const el = document.getElementById(id);
+  if (el) el.innerHTML = content;
+}
+
+function updateKPIs(brand) {
+  const cards = [1,2,3,4,5,6].map(i => document.getElementById(`kpi-card-${i}`));
+  cards.forEach(c => {
+    c.classList.remove('flip');
+    // trigger reflow
+    void c.offsetWidth;
+    c.classList.add('flip');
+  });
+
+  if (brand === 'ALL') {
+    updateElementContent('kpi-total', '2,250');
+    updateElementContent('kpi-total-sub', 'UNITS ANALYZED');
+    updateElementContent('kpi-avg', '52,507');
+    updateElementContent('kpi-avg-sub', 'MEAN ACROSS ALL');
+    updateElementContent('kpi-range-min', '$5K');
+    updateElementContent('kpi-range-max', '$100K');
+    updateElementContent('kpi-ev', '24.6');
+    updateElementContent('kpi-ev-sub', 'OF ALL LISTINGS');
+    
+    updateElementContent('kpi-leader-label', 'PRICE LEADER');
+    updateElementContent('kpi-leader-value', 'BMW');
+    updateElementContent('kpi-leader-sub', 'AVG $54,153');
+    document.getElementById('kpi-card-5').className = 'kpi-card accent-blue flip';
+    
+    updateElementContent('kpi-premium-label', 'PREMIUM SEGMENT');
+    updateElementContent('kpi-premium-value', 'DIESEL<br>LIKE NEW');
+    updateElementContent('kpi-premium-sub', '$56,984 AVG — BEATS NEW EV');
+    document.getElementById('kpi-card-6').className = 'kpi-card flip';
+    document.getElementById('kpi-card-6').style.setProperty('--accent', 'var(--gold)');
+  } else {
+    const d = BRAND_DATA[brand];
+    updateElementContent('kpi-total', d.count.toString());
+    updateElementContent('kpi-total-sub', `${brand.toUpperCase()} UNITS`);
+    
+    updateElementContent('kpi-avg', Math.round(d.avg_price).toLocaleString());
+    updateElementContent('kpi-avg-sub', `${brand.toUpperCase()} MEAN`);
+    
+    const minMax = BRAND_MINMAX[brand];
+    updateElementContent('kpi-range-min', `$${Math.round(minMax.min/1000)}K`);
+    updateElementContent('kpi-range-max', `$${Math.round(minMax.max/1000)}K`);
+    
+    updateElementContent('kpi-ev', d.electric_pct.toFixed(1));
+    updateElementContent('kpi-ev-sub', `OF ${brand.toUpperCase()} LISTINGS`);
+    
+    // KPI 5: TOP FUEL
+    const bfa = BRAND_FUEL_AVG[brand];
+    let topF = '';
+    let topV = 0;
+    for (let f in bfa) {
+      if (bfa[f] > topV) { topV = bfa[f]; topF = f; }
+    }
+    const colorClass = topF === 'Diesel' ? 'accent-gold' : (topF === 'Petrol' ? 'accent-red' : (topF === 'Electric' ? 'accent-blue' : 'accent-green'));
+    updateElementContent('kpi-leader-label', 'TOP FUEL');
+    updateElementContent('kpi-leader-value', topF.toUpperCase());
+    updateElementContent('kpi-leader-sub', `AVG $${Math.round(topV).toLocaleString()}`);
+    document.getElementById('kpi-card-5').className = `kpi-card ${colorClass} flip`;
+    
+    // KPI 6: TRANSMISSION MIX
+    updateElementContent('kpi-premium-label', 'TRANSMISSION MIX');
+    updateElementContent('kpi-premium-value', `${d.auto_pct.toFixed(1)}%<br>AUTO`);
+    updateElementContent('kpi-premium-sub', `${(100 - d.auto_pct).toFixed(1)}% MANUAL`);
+    document.getElementById('kpi-card-6').className = 'kpi-card flip';
+    document.getElementById('kpi-card-6').style.setProperty('--accent', 'var(--purple)');
+  }
+}
+
+// ─── STACKED AREA ────────────────────────────────────────────────────────────
+
+
+function buildStacked(filterBrand) {
+  const ctx = document.getElementById('stackedChart').getContext('2d');
+  if (stackedChart) stackedChart.destroy();
+
+  const sourceData = filterBrand === 'ALL' ? YEAR_FUEL : BRAND_YEAR_FUEL[filterBrand];
+  const years = sourceData.map(d => d.Year);
+  
+  const datasets = FUELS.map(fuel => ({
+    label: fuel,
+    data: sourceData.map(d => d[fuel]),
+    backgroundColor: FUEL_COLORS[fuel] + '55',
+    borderColor: FUEL_COLORS[fuel],
+    borderWidth: 2,
+    fill: true,
+    tension: 0.4,
+    pointRadius: 0,
+    pointHoverRadius: 4,
+  }));
+
+  stackedChart = new Chart(ctx, {
+    type: 'line',
+    data: { labels: years, datasets },
+    options: {
+      responsive:true,
+      animation: { duration:800 },
+      interaction: { mode:'index', intersect:false },
+      scales: {
+        x: {
+          stacked:true,
+          grid: { color:'rgba(255,255,255,0.04)' },
+          ticks: { maxTicksLimit:12, color:'#5a5a7a' },
+          border: { color:'rgba(255,255,255,0.08)' }
+        },
+        y: {
+          stacked:true,
+          grid: { color:'rgba(255,255,255,0.04)' },
+          ticks: { color:'#5a5a7a' },
+          border: { color:'rgba(255,255,255,0.08)' }
+        }
+      },
+      plugins: {
+        legend: {
+          position:'bottom',
+          labels: {
+            color:'#9090b0',
+            font:{ family:"'JetBrains Mono'", size:9 },
+            boxWidth:10, padding:14
+          }
+        },
+        tooltip: {
+          backgroundColor:'#13131f',
+          borderColor:'rgba(255,255,255,0.1)',
+          borderWidth:1,
+          callbacks: {
+            label: ctx => ` ${ctx.dataset.label}: ${ctx.raw} listings`
+          }
+        }
+      }
+    }
+  });
+}
+
+// ─── ERA GRID ────────────────────────────────────────────────────────────────
+
+function buildEraGrid(filterBrand) {
+  const container = document.getElementById('eraGrid');
+  const brands = filterBrand === 'ALL' ? BRANDS : [filterBrand];
+
+  let allVals = [];
+  brands.forEach(b => ERAS.forEach(e => allVals.push(ERA_BRAND[b][e])));
+  const minV = Math.min(...allVals), maxV = Math.max(...allVals);
+
+  let html = '<div class="era-header-row">';
+  html += '<div class="era-header-cell"></div>';
+  ERAS.forEach(e => { html += `<div class="era-header-cell">${e}</div>`; });
+  html += '</div>';
+
+  html += '<div class="era-grid">';
+  brands.forEach(b => {
+    const c = BRAND_COLORS[b];
+    html += '<div class="era-row">';
+    html += `<div class="era-brand-label" style="color:${c}">${b.toUpperCase()}</div>`;
+    ERAS.forEach(e => {
+      const val = ERA_BRAND[b][e];
+      const t = (val - minV)/(maxV - minV);
+      const alpha = 0.08 + t * 0.75;
+      const isMax = val === Math.max(...ERAS.map(er => ERA_BRAND[b][er]));
+      html += `<div class="era-cell" 
+               style="background:${c}${Math.round(alpha*255).toString(16).padStart(2,'0')};
+                      color:${t > 0.5 ? '#e8e8f0' : '#9090b0'};
+                      ${isMax ? `box-shadow:0 0 0 1px ${c}88;` : ''}"
+               title="${b} ${e}: ${val} listings">
+               ${val}
+               </div>`;
+    });
+    html += '</div>';
+  });
+  html += '</div>';
+
+  container.innerHTML = html;
+}
+
+// ─── SCATTER ─────────────────────────────────────────────────────────────────
+
+function buildScatter(filterBrand) {
+  const ctx = document.getElementById('scatterChart').getContext('2d');
+  if (scatterChart) scatterChart.destroy();
+
+  const filtered = filterBrand === 'ALL'
+    ? SCATTER_DATA
+    : SCATTER_DATA.filter(d => d.Brand === filterBrand);
+
+  const brandDatasets = BRANDS
+    .filter(b => filterBrand === 'ALL' || b === filterBrand)
+    .map(b => ({
+      label: b,
+      data: filtered.filter(d => d.Brand === b).map(d => ({ x: d['Engine Size'], y: d.Price })),
+      backgroundColor: BRAND_COLORS[b] + 'bb',
+      borderColor: BRAND_COLORS[b],
+      borderWidth: 0,
+      pointRadius: 5,
+      pointHoverRadius: 7,
+    }));
+
+  // Flat regression line (r≈0)
+  const regLine = {
+    label: 'REGRESSION (r = −0.01)',
+    data: [{x:1,y:52507},{x:6,y:52507}],
+    type:'line',
+    borderColor:'rgba(255,60,0,0.4)',
+    borderWidth:1.5,
+    borderDash:[6,4],
+    pointRadius:0,
+    fill:false,
+    tension:0,
+  };
+
+  scatterChart = new Chart(ctx, {
+    type:'scatter',
+    data: { datasets: [...brandDatasets, regLine] },
+    options: {
+      responsive:true,
+      animation:{ duration:600 },
+      scales:{
+        x:{
+          title:{display:true, text:'ENGINE SIZE (L)', color:'#5a5a7a', font:{family:"'JetBrains Mono'",size:9}},
+          min:0.8, max:6.3,
+          grid:{color:'rgba(255,255,255,0.04)'},
+          ticks:{color:'#5a5a7a'},
+          border:{color:'rgba(255,255,255,0.08)'},
+        },
+        y:{
+          title:{display:true, text:'PRICE ($)', color:'#5a5a7a', font:{family:"'JetBrains Mono'",size:9}},
+          grid:{color:'rgba(255,255,255,0.04)'},
+          ticks:{color:'#5a5a7a', callback:v=>'$'+Math.round(v/1000)+'K'},
+          border:{color:'rgba(255,255,255,0.08)'},
+        }
+      },
+      plugins:{
+        legend:{
+          position:'bottom',
+          labels:{color:'#9090b0', font:{family:"'JetBrains Mono'",size:9}, boxWidth:8, padding:12}
+        },
+        tooltip:{
+          backgroundColor:'#13131f',
+          borderColor:'rgba(255,255,255,0.1)',
+          borderWidth:1,
+          callbacks:{
+            label: ctx => ` ${ctx.dataset.label}: ${ctx.raw.x}L · $${ctx.raw.y?.toLocaleString()}`
+          }
+        }
+      }
+    }
+  });
+}
+
+// ─── HISTOGRAM ─────────────────────────────────────────────────────────────
+
+function buildHistogram(filterBrand) {
+  const ctx = document.getElementById('histChart').getContext('2d');
+  if (histChart) histChart.destroy();
+
+  const histData = PRICE_HIST[filterBrand];
+  const labels = ['0-10K', '10-20K', '20-30K', '30-40K', '40-50K', '50-60K', '60-70K', '70-80K', '80-90K', '90-100K'];
+
+  histChart = new Chart(ctx, {
+    type: 'bar',
+    data: {
+      labels: labels,
+      datasets: [{
+        label: 'Listings',
+        data: histData,
+        backgroundColor: '#ffd200aa',
+        borderColor: '#ffd200',
+        borderWidth: 1,
+        borderRadius: 2
+      }]
+    },
+    options: {
+      responsive: true,
+      animation: { duration: 600 },
+      scales: {
+        x: {
+          grid: { color: 'rgba(255,255,255,0.04)', display: false },
+          ticks: { color: '#5a5a7a' },
+          border: { color: 'rgba(255,255,255,0.08)' }
+        },
+        y: {
+          grid: { color: 'rgba(255,255,255,0.04)' },
+          ticks: { color: '#5a5a7a' },
+          border: { color: 'rgba(255,255,255,0.08)' }
+        }
+      },
+      plugins: {
+        legend: { display: false },
+        tooltip: {
+          backgroundColor: '#13131f',
+          borderColor: 'rgba(255,255,255,0.1)',
+          borderWidth: 1
+        }
+      }
+    }
+  });
+}
+
+// ─── MILEAGE SCATTER ─────────────────────────────────────────────────────────
+
+function pearsonCorrelation(x, y) {
+  if (x.length !== y.length || x.length === 0) return 0;
+  const n = x.length;
+  const sumX = x.reduce((a, b) => a + b, 0);
+  const sumY = y.reduce((a, b) => a + b, 0);
+  const sumX2 = x.reduce((a, b) => a + b*b, 0);
+  const sumY2 = y.reduce((a, b) => a + b*b, 0);
+  const sumXY = x.reduce((a, val, i) => a + val * y[i], 0);
+  
+  const num = (n * sumXY) - (sumX * sumY);
+  const den = Math.sqrt((n * sumX2 - sumX*sumX) * (n * sumY2 - sumY*sumY));
+  if (den === 0) return 0;
+  return num / den;
+}
+
+function buildMileageScatter(filterBrand) {
+  const ctx = document.getElementById('mileageChart').getContext('2d');
+  if (mileageChart) mileageChart.destroy();
+
+  const filtered = filterBrand === 'ALL'
+    ? MILEAGE_DATA
+    : MILEAGE_DATA.filter(d => d.Brand === filterBrand);
+
+  const condColors = {
+    'New': '#00ff88',       // --green
+    'Like New': '#ffd200',  // --gold
+    'Used': '#ff3c00'       // --red
+  };
+
+  const condDatasets = CONDITIONS.map(cond => ({
+    label: cond,
+    data: filtered.filter(d => d.Condition === cond).map(d => ({ x: d.Mileage, y: d.Price, _brand: d.Brand })),
+    backgroundColor: condColors[cond] + 'aa',
+    borderColor: condColors[cond],
+    borderWidth: 1,
+    pointRadius: 4,
+    pointHoverRadius: 6,
+  }));
+
+  // correlation badge
+  const allX = filtered.map(d => d.Mileage);
+  const allY = filtered.map(d => d.Price);
+  const r = pearsonCorrelation(allX, allY);
+  const badge = document.getElementById('mileage-corr-badge');
+  let signalText = 'NO SIGNAL';
+  let badgeColor = 'var(--text-mid)';
+  if (Math.abs(r) >= 0.3) { signalText = 'MODERATE'; badgeColor = 'var(--gold)'; }
+  else if (Math.abs(r) >= 0.1) { signalText = 'WEAK'; badgeColor = 'var(--blue)'; }
+  if (Math.abs(r) >= 0.6) { signalText = 'STRONG'; badgeColor = 'var(--red)'; }
+  
+  badge.innerHTML = `r = ${r.toFixed(2)} &nbsp;·&nbsp; ${signalText}`;
+  badge.style.color = badgeColor;
+  badge.style.borderColor = badgeColor;
+
+  mileageChart = new Chart(ctx, {
+    type: 'scatter',
+    data: { datasets: condDatasets },
+    options: {
+      responsive: true,
+      animation: { duration: 600 },
+      scales: {
+        x: {
+          title: { display: true, text: 'MILEAGE', color: '#5a5a7a', font: { family: "'JetBrains Mono'", size: 9 } },
+          grid: { color: 'rgba(255,255,255,0.04)' },
+          ticks: { color: '#5a5a7a', callback: v => Math.round(v/1000) + 'K' },
+          border: { color: 'rgba(255,255,255,0.08)' }
+        },
+        y: {
+          title: { display: true, text: 'PRICE ($)', color: '#5a5a7a', font: { family: "'JetBrains Mono'", size: 9 } },
+          grid: { color: 'rgba(255,255,255,0.04)' },
+          ticks: { color: '#5a5a7a', callback: v => '$' + Math.round(v/1000) + 'K' },
+          border: { color: 'rgba(255,255,255,0.08)' }
+        }
+      },
+      plugins: {
+        legend: {
+          position: 'bottom',
+          labels: { color: '#9090b0', font: { family: "'JetBrains Mono'", size: 9 }, boxWidth: 8, padding: 12 }
+        },
+        tooltip: {
+          backgroundColor: '#13131f',
+          borderColor: 'rgba(255,255,255,0.1)',
+          borderWidth: 1,
+          callbacks: {
+            label: ctx => ` ${ctx.dataset.label} (${ctx.raw._brand}): ${ctx.raw.x.toLocaleString()} mi · $${ctx.raw.y?.toLocaleString()}`
+          }
+        }
+      }
+    }
+  });
+}
+
+// ─── FILTER LOGIC ────────────────────────────────────────────────────────────
+
+document.querySelectorAll('.brand-pill').forEach(pill => {
+  pill.addEventListener('click', () => {
+    document.querySelectorAll('.brand-pill').forEach(p => p.classList.remove('active'));
+    pill.classList.add('active');
+    activeBrand = pill.dataset.brand;
+    updateKPIs(activeBrand);
+    buildRadar(activeBrand);
+    buildStacked(activeBrand);
+    buildEraGrid(activeBrand);
+    buildScatter(activeBrand);
+    buildHistogram(activeBrand);
+    buildMileageScatter(activeBrand);
+  });
+});
+
+// ─── INIT ────────────────────────────────────────────────────────────────────
+
+updateKPIs('ALL');
+buildRadar('ALL');
+buildHeatmap();
+buildStacked('ALL');
+buildEraGrid('ALL');
+buildScatter('ALL');
+buildHistogram('ALL');
+buildMileageScatter('ALL');
+
+</script>
+</body>
+</html>
